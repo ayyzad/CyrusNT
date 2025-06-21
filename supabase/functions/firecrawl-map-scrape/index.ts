@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
               console.log(`[Info] Filtered ${newUrls.length} URLs to ${filteredUrls.length} URLs based on category and keywords`);
               
               // Limit to first 5 URLs to avoid timeouts and rate limits
-              const limitedLinks = filteredUrls.slice(0, 2);
+              const limitedLinks = filteredUrls.slice(0, 5);
               
               // Step 2: Scrape each individual article URL
               for (const link of limitedLinks) {
