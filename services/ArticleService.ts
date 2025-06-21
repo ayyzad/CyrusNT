@@ -5,7 +5,7 @@ export async function getLatestArticles(limit: number = 20): Promise<Article[]> 
   const supabase = await createClient();
     const { data, error } = await supabase
       .from('articles')
-      .select('id, title, link, pub_date, source, image_url')
+      .select('id, title, link, pub_date, source, image_url, description, tags')
       .order('pub_date', { ascending: false })
       .limit(limit);
 
@@ -16,3 +16,5 @@ export async function getLatestArticles(limit: number = 20): Promise<Article[]> 
 
     return data as Article[];
 }
+
+

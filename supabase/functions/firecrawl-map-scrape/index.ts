@@ -40,6 +40,7 @@ interface FirecrawlResponse {
       publishedDate?: string;
       summary?: string;
       content?: string;
+      tags?: string[];
     };
     metadata?: {
       title?: string;
@@ -256,7 +257,8 @@ Deno.serve(async (req) => {
                           author: { type: 'string', description: 'Article author or byline' },
                           publishedDate: { type: 'string', description: 'Article publication date in ISO format' },
                           summary: { type: 'string', description: 'Article summary or description' },
-                          content: { type: 'string', description: 'Main article content' }
+                          content: { type: 'string', description: 'Main article content' },
+                          tags: { type: 'array', items: { type: 'string' }, description: 'An array of relevant keywords or tags for the article' }
                         }
                       }
                     }
@@ -322,6 +324,7 @@ Deno.serve(async (req) => {
                       author: author,
                       pub_date: pubDate,
                       guid: link,
+                      tags: jsonData.tags || [],
                     })
                   });
                   
