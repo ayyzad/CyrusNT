@@ -34,7 +34,13 @@ interface FirecrawlResponse {
   success: boolean;
   data?: {
     markdown?: string;
-    json?: any;
+    json?: {
+      title?: string;
+      author?: string;
+      publishedDate?: string;
+      summary?: string;
+      content?: string;
+    };
     metadata?: {
       title?: string;
       description?: string;
@@ -47,10 +53,60 @@ interface FirecrawlResponse {
       ogLocaleAlternate?: string[];
       ogSiteName?: string;
       sourceURL?: string;
+      publishedTime?: string;
+      'article:published_time'?: string;
+      modifiedTime?: string;
+      'article:modified_time'?: string;
     };
     links?: string[];
   };
   error?: string;
+}
+
+// URL filtering function based on website category and keywords
+function shouldProcessUrl(url: string, websiteCategory: string): boolean {
+  // Iran-Specific websites: Accept all articles (no filtering)
+  if (websiteCategory === 'Iran-Specific') {
+    return true;
+  }
+  
+  // International websites: Apply Iran-related filtering
+  if (websiteCategory === 'International') {
+    const iranKeywords = [
+      // Core Iran terms
+      'iran', 'iranian', 'tehran', 'persian', 'persia',
+      // Leaders and officials
+      'khamenei', 'raisi', 'rouhani', 'zarif', 'ayatollah',
+      // Military and security
+      'irgc', 'revolutionary-guard', 'quds', 'basij', 'sepah',
+      // Nuclear program
+      'nuclear', 'uranium', 'enrichment', 'centrifuge', 'natanz', 'fordow',
+      // Sanctions and diplomacy
+      'sanctions', 'jcpoa', 'nuclear-deal', 'nuclear-talks',
+      // Regional conflicts involving Iran
+      'israel-iran', 'iran-israel', 'iran-war', 'iran-conflict',
+      'houthis', 'hezbollah', 'proxy', 'axis-resistance',
+      // Iranian cities and regions
+      'isfahan', 'mashhad', 'shiraz', 'tabriz', 'qom', 'karaj',
+      // Iranian organizations
+      'mois', 'ministry-intelligence', 'iriaf', 'irin'
+    ];
+    
+    const urlLower = url.toLowerCase();
+    const hasIranKeyword = iranKeywords.some(keyword => urlLower.includes(keyword));
+    
+    if (hasIranKeyword) {
+      console.log(`[Info] URL passed Iran filter: ${url}`);
+      return true;
+    } else {
+      console.log(`[Info] URL filtered out (no Iran keywords): ${url}`);
+      return false;
+    }
+  }
+  
+  // Default: Accept all URLs for unknown categories
+  console.log(`[Info] Unknown category '${websiteCategory}', accepting URL: ${url}`);
+  return true;
 }
 
 // Load websites from database
@@ -170,8 +226,13 @@ Deno.serve(async (req) => {
               
               console.log(`[Info] Found ${existingUrls.size} existing articles, ${newUrls.length} new URLs to process`);
               
+              // Apply URL filtering based on website category and keywords
+              const filteredUrls = newUrls.filter((url: string) => shouldProcessUrl(url, website.category));
+              
+              console.log(`[Info] Filtered ${newUrls.length} URLs to ${filteredUrls.length} URLs based on category and keywords`);
+              
               // Limit to first 5 URLs to avoid timeouts and rate limits
-              const limitedLinks = newUrls.slice(0, 5);
+              const limitedLinks = filteredUrls.slice(0, 2);
               
               // Step 2: Scrape each individual article URL
               for (const link of limitedLinks) {
@@ -186,6 +247,19 @@ Deno.serve(async (req) => {
                   },
                   body: JSON.stringify({
                     url: link,
+                    formats: ['markdown', 'json'],
+                    jsonOptions: {
+                      schema: {
+                        type: 'object',
+                        properties: {
+                          title: { type: 'string', description: 'Article title' },
+                          author: { type: 'string', description: 'Article author or byline' },
+                          publishedDate: { type: 'string', description: 'Article publication date in ISO format' },
+                          summary: { type: 'string', description: 'Article summary or description' },
+                          content: { type: 'string', description: 'Main article content' }
+                        }
+                      }
+                    }
                   }),
                 }).then(async response => {
                   const text = await response.text();
@@ -200,11 +274,34 @@ Deno.serve(async (req) => {
                 if (scrapeResponse.success && scrapeResponse.data) {
                   const metadata = scrapeResponse.data.metadata || {};
                   const content = scrapeResponse.data.markdown || '';
+                  const jsonData = scrapeResponse.data.json || {};
                   
-                  // Use scraped article metadata for title and description
-                  const title = metadata.title || metadata.ogTitle || 'Untitled';
-                  const description = metadata.description || metadata.ogDescription || '';
-                  const author = metadata.author || '';
+                  // Use extracted structured data first, fallback to metadata
+                  const title = jsonData.title || metadata.title || metadata.ogTitle || 'Untitled';
+                  const description = jsonData.summary || metadata.description || metadata.ogDescription || '';
+                  const author = jsonData.author || metadata.author || '';
+                  
+                  // Extract publication date from metadata fields (where it actually exists)
+                  let pubDate = new Date().toISOString(); // Default fallback
+                  const possibleDateFields = [
+                    metadata.publishedTime,
+                    metadata['article:published_time'], 
+                    metadata.modifiedTime,
+                    metadata['article:modified_time'],
+                    jsonData.publishedDate
+                  ];
+                  
+                  for (const dateField of possibleDateFields) {
+                    if (dateField) {
+                      try {
+                        pubDate = new Date(dateField).toISOString();
+                        console.log(`[Info] Using publication date: ${dateField} for ${link}`);
+                        break; // Use the first valid date found
+                      } catch (error) {
+                        console.log(`[Warning] Invalid date format for ${link}: ${dateField}`);
+                      }
+                    }
+                  }
                   
                   // Insert article using direct Supabase REST API with upsert
                   const insertResponse = await fetch(`${supabaseUrl}/rest/v1/articles?on_conflict=link`, {
@@ -223,7 +320,7 @@ Deno.serve(async (req) => {
                       source: website.name,
                       category: website.category,
                       author: author,
-                      pub_date: new Date().toISOString(),
+                      pub_date: pubDate,
                       guid: link,
                     })
                   });

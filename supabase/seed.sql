@@ -9,3 +9,14 @@ VALUES (
     true,
     true
 ) ON CONFLICT (url) DO NOTHING;
+
+-- Insert Reuters Iran search
+INSERT INTO websites (url, name, description, category, is_active, scraping_enabled) 
+VALUES (
+    'https://www.reuters.com/world/middle-east/',
+    'Reuters',
+    'Reuters news coverage and analysis about Middle East',
+    'International',
+    true,
+    true
+) ON CONFLICT (url) DO NOTHING;

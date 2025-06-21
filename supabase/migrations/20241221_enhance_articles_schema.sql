@@ -1,4 +1,4 @@
--- Enhance articles table for better RSS content storage
+-- Enhance articles table for better content storage
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS content TEXT;
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS author TEXT;
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS image_url TEXT;
@@ -9,22 +9,6 @@ ALTER TABLE articles ADD COLUMN IF NOT EXISTS is_processed BOOLEAN DEFAULT false
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS sentiment_score DECIMAL(3,2); -- -1.0 to 1.0
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS language_code VARCHAR(5) DEFAULT 'en';
 
--- Create RSS feeds management table
-CREATE TABLE IF NOT EXISTS rss_feeds (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  url TEXT NOT NULL UNIQUE,
-  category TEXT NOT NULL,
-  description TEXT,
-  last_fetched TIMESTAMP WITH TIME ZONE,
-  fetch_interval INTEGER DEFAULT 30, -- minutes
-  is_active BOOLEAN DEFAULT true,
-  error_count INTEGER DEFAULT 0,
-  last_error TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
 -- Create indexes for enhanced articles table
 CREATE INDEX IF NOT EXISTS idx_articles_content_search ON articles USING gin(to_tsvector('english', coalesce(content, '')));
 CREATE INDEX IF NOT EXISTS idx_articles_title_search ON articles USING gin(to_tsvector('english', coalesce(title, '')));
@@ -34,15 +18,6 @@ CREATE INDEX IF NOT EXISTS idx_articles_word_count ON articles(word_count);
 CREATE INDEX IF NOT EXISTS idx_articles_is_processed ON articles(is_processed);
 CREATE INDEX IF NOT EXISTS idx_articles_sentiment ON articles(sentiment_score);
 CREATE INDEX IF NOT EXISTS idx_articles_language ON articles(language_code);
-
--- Create indexes for RSS feeds table
-CREATE INDEX IF NOT EXISTS idx_rss_feeds_category ON rss_feeds(category);
-CREATE INDEX IF NOT EXISTS idx_rss_feeds_active ON rss_feeds(is_active);
-CREATE INDEX IF NOT EXISTS idx_rss_feeds_last_fetched ON rss_feeds(last_fetched);
-
--- Add foreign key relationship (optional - links articles to their source feed)
-ALTER TABLE articles ADD COLUMN IF NOT EXISTS feed_id UUID REFERENCES rss_feeds(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
 
 -- Create article statistics table for analytics
 CREATE TABLE IF NOT EXISTS article_stats (
@@ -59,21 +34,7 @@ CREATE TABLE IF NOT EXISTS article_stats (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_article_stats_date ON article_stats(date);
 
 -- Enable RLS on new tables
-ALTER TABLE rss_feeds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE article_stats ENABLE ROW LEVEL SECURITY;
-
--- Create policies for RSS feeds
-CREATE POLICY "Allow read access to rss_feeds" ON rss_feeds
-    FOR SELECT USING (true);
-
-CREATE POLICY "Allow insert for service role on rss_feeds" ON rss_feeds
-    FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Allow update for service role on rss_feeds" ON rss_feeds
-    FOR UPDATE USING (true);
-
-CREATE POLICY "Allow delete for service role on rss_feeds" ON rss_feeds
-    FOR DELETE USING (true);
 
 -- Create policies for article stats
 CREATE POLICY "Allow read access to article_stats" ON article_stats
@@ -84,12 +45,6 @@ CREATE POLICY "Allow insert for service role on article_stats" ON article_stats
 
 CREATE POLICY "Allow update for service role on article_stats" ON article_stats
     FOR UPDATE USING (true);
-
--- Update trigger for rss_feeds
-CREATE TRIGGER update_rss_feeds_updated_at 
-    BEFORE UPDATE ON rss_feeds 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to calculate reading time based on word count
 CREATE OR REPLACE FUNCTION calculate_reading_time(word_count INTEGER)
