@@ -1,5 +1,6 @@
-import { NewsFeed } from "@/components/news-feed";
+import { HomePage } from "@/components/homepage";
+
 
 export default function Home() {
-  return <NewsFeed />;
+  return <HomePage />;
 }
