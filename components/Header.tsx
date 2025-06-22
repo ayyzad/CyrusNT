@@ -32,7 +32,7 @@ export function Header() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon">
-            <Menu className="h-6 w-6" />
+            <Menu className="h-12 w-12" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
