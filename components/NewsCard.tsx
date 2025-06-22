@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ArrowRight, Clock } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import NumberLineIndicator from './NeutralityIndicator';
 

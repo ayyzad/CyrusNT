@@ -15,7 +15,7 @@ const WhyPage = () => {
         <p className="text-lg text-gray-700 dark:text-gray-300 mb-6">
           Every news outlet seemed to have their own spin - some leaning heavily toward one side or another, 
           others pushing specific political narratives. We found ourselves constantly questioning: 
-          <em>"What's the real story? What are we missing? How biased is this source?"</em>
+          <em>&ldquo;What&apos;s the real story? What are we missing? How biased is this source?&rdquo;</em>
         </p>
 
         <p className="text-lg text-gray-700 dark:text-gray-300 mb-6">

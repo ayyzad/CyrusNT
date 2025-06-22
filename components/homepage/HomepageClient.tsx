@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ArrowRight, Book, Newspaper, Sparkles, Zap } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AiSummaryCard, { ComparativeAnalysis } from '@/components/AiSummaryCard';
 import NewsCard, { Article } from '@/components/NewsCard';
