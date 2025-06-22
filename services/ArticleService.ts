@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
-import { Article } from '@/components/news-card';
+import { Article } from '@/components/NewsCard';
 
 async function getWebsiteNeutralityRatings(): Promise<Record<string, number>> {
   const supabase = await createClient();

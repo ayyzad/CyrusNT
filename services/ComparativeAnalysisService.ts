@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
-import { ComparativeAnalysis } from '@/components/ai-summary-card';
+import { ComparativeAnalysis } from '@/components/AiSummaryCard';
 
 export async function getLatestAnalyses(limit: number = 5): Promise<ComparativeAnalysis[]> {
   const supabase = await createClient();

@@ -3,7 +3,7 @@
 import React from 'react';
 import { ArrowRight, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import NumberLineIndicator from '../neutrality-indicator/number-line';
+import NumberLineIndicator from './NeutralityIndicator';
 
 export interface Article {
   id: string;

@@ -1,5 +1,5 @@
 import React from 'react';
-import SourcesTable from '@/components/sources/SourcesTable';
+import SourcesTable from '@/components/SourcesTable';
 
 const SourcesPage = () => {
   return (

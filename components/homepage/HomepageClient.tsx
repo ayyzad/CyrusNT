@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ArrowRight, Book, Newspaper, Sparkles, Zap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import AiSummaryCard, { ComparativeAnalysis } from '@/components/ai-summary-card';
-import NewsCard, { Article } from '@/components/news-card';
+import AiSummaryCard, { ComparativeAnalysis } from '@/components/AiSummaryCard';
+import NewsCard, { Article } from '@/components/NewsCard';
 import { SelectableBadge } from '@/components/ui/selectable-badge';
 import { Button } from '@/components/ui/button';
 
@@ -14,9 +14,16 @@ interface HomepageClientProps {
   tags: string[];
 }
 
+const INITIAL_ARTICLES_COUNT = 12;
+const ARTICLES_LOAD_MORE_COUNT = 8;
+const INITIAL_ANALYSES_COUNT = 3;
+const ANALYSES_LOAD_MORE_COUNT = 2;
+
 export function HomepageClient({ articles, analyses, tags }: HomepageClientProps) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [showAllTags, setShowAllTags] = useState(false);
+  const [visibleArticlesCount, setVisibleArticlesCount] = useState(INITIAL_ARTICLES_COUNT);
+  const [visibleAnalysesCount, setVisibleAnalysesCount] = useState(INITIAL_ANALYSES_COUNT);
 
   const filteredArticles = useMemo(() => {
     if (!selectedTag) return articles;
@@ -24,12 +31,60 @@ export function HomepageClient({ articles, analyses, tags }: HomepageClientProps
   }, [selectedTag, articles]);
 
   const visibleTags = showAllTags ? tags : tags.slice(0, 12);
+  const displayedArticles = filteredArticles.slice(0, visibleArticlesCount);
+  const displayedAnalyses = analyses.slice(0, visibleAnalysesCount);
+
+  const handleLoadMoreArticles = () => {
+    setVisibleArticlesCount(prev => prev + ARTICLES_LOAD_MORE_COUNT);
+  };
+
+  const handleLoadMoreAnalyses = () => {
+    setVisibleAnalysesCount(prev => prev + ANALYSES_LOAD_MORE_COUNT);
+  };
+
+  // Reset article count when tag filter changes
+  useEffect(() => {
+    setVisibleArticlesCount(INITIAL_ARTICLES_COUNT);
+  }, [selectedTag]);
 
   const renderArticleGrid = (articlesToRender: Article[]) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {articlesToRender.map((article) => (
-        <NewsCard key={article.id} article={article} />
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {articlesToRender.map((article) => (
+          <NewsCard key={article.id} article={article} />
+        ))}
+      </div>
+      {filteredArticles.length > visibleArticlesCount && (
+        <div className="flex justify-center">
+          <Button 
+            onClick={handleLoadMoreArticles}
+            variant="outline"
+            className="px-8 py-2"
+          >
+            Load More Articles ({filteredArticles.length - visibleArticlesCount} remaining)
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderAnalysesSection = (analysesToRender: ComparativeAnalysis[]) => (
+    <div className="space-y-6">
+      {analysesToRender.map((analysis) => (
+        <AiSummaryCard key={analysis.id} analysis={analysis} />
       ))}
+      {analyses.length > visibleAnalysesCount && (
+        <div className="flex justify-center">
+          <Button 
+            onClick={handleLoadMoreAnalyses}
+            variant="outline"
+            size="sm"
+            className="px-6"
+          >
+            Load More Summaries ({analyses.length - visibleAnalysesCount} remaining)
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -64,17 +119,13 @@ export function HomepageClient({ articles, analyses, tags }: HomepageClientProps
             <Sparkles className="h-6 w-6 mr-2 text-primary" />
             <span>Topic Summary</span>
           </h2>
-          <div className="space-y-6">
-            {analyses.map((analysis) => (
-              <AiSummaryCard key={analysis.id} analysis={analysis} />
-            ))}
-          </div>
+          {renderAnalysesSection(displayedAnalyses)}
         </aside>
 
         <div className="lg:col-span-2">
-          <h2 className="text-3xl font-bold mb-6 text-foreground">Latest Articles</h2>
+          <h2 className="text-3xl font-bold mb-6 text-foreground">Latest News</h2>
           {renderTags()}
-          {renderArticleGrid(filteredArticles)}
+          {renderArticleGrid(displayedArticles)}
         </div>
       </main>
 
@@ -86,16 +137,14 @@ export function HomepageClient({ articles, analyses, tags }: HomepageClientProps
             <TabsTrigger value="articles">Latest Articles</TabsTrigger>
           </TabsList>
           <TabsContent value="analysis">
-            <div className="space-y-6 mt-6">
-              {analyses.map((analysis) => (
-                <AiSummaryCard key={analysis.id} analysis={analysis} />
-              ))}
+            <div className="mt-6">
+              {renderAnalysesSection(displayedAnalyses)}
             </div>
           </TabsContent>
           <TabsContent value="articles">
             <div className="mt-6">
               {renderTags()}
-              {renderArticleGrid(filteredArticles)}
+              {renderArticleGrid(displayedArticles)}
             </div>
           </TabsContent>
         </Tabs>
