@@ -23,7 +23,7 @@ async function getWebsiteNeutralityRatings(): Promise<Record<string, number>> {
   return neutralityMap;
 }
 
-export async function getLatestArticles(limit: number = 20): Promise<Article[]> {
+export async function getLatestArticles(limit: number = 100): Promise<Article[]> {
   const supabase = await createClient();
   
   // Fetch articles

@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS supabase_vault;
 -- 1. Create the cron job to run every 30 minutes
 SELECT cron.schedule(
     'invoke-firecrawl-map-scrape', -- Job name
-    '*/15 * * * *', -- Every 15 minutes
+    '*/60 * * * *', -- Every 60 minutes
     $$
     SELECT net.http_post(
         url:= (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url') || '/functions/v1/firecrawl-map-scrape?action=fetch',

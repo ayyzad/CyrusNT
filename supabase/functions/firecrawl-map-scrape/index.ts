@@ -66,48 +66,43 @@ interface FirecrawlResponse {
 
 // URL filtering function based on website category and keywords
 function shouldProcessUrl(url: string, websiteCategory: string): boolean {
-  // Iran-Specific websites: Accept all articles (no filtering)
+  // For 'Iran-Specific' websites, we accept all articles without any keyword filtering.
   if (websiteCategory === 'Iran-Specific') {
     return true;
   }
-  
-  // International websites: Apply Iran-related filtering
-  if (websiteCategory === 'International') {
-    const iranKeywords = [
-      // Core Iran terms
-      'iran', 'iranian', 'tehran', 'persian', 'persia',
-      // Leaders and officials
-      'khamenei', 'raisi', 'rouhani', 'zarif', 'ayatollah',
-      // Military and security
-      'irgc', 'revolutionary-guard', 'quds', 'basij', 'sepah',
-      // Nuclear program
-      'nuclear', 'uranium', 'enrichment', 'centrifuge', 'natanz', 'fordow',
-      // Sanctions and diplomacy
-      'sanctions', 'jcpoa', 'nuclear-deal', 'nuclear-talks',
-      // Regional conflicts involving Iran
-      'israel-iran', 'iran-israel', 'iran-war', 'iran-conflict',
-      'houthis', 'hezbollah', 'proxy', 'axis-resistance',
-      // Iranian cities and regions
-      'isfahan', 'mashhad', 'shiraz', 'tabriz', 'qom', 'karaj',
-      // Iranian organizations
-      'mois', 'ministry-intelligence', 'iriaf', 'irin'
-    ];
-    
-    const urlLower = url.toLowerCase();
-    const hasIranKeyword = iranKeywords.some(keyword => urlLower.includes(keyword));
-    
-    if (hasIranKeyword) {
-      console.log(`[Info] URL passed Iran filter: ${url}`);
-      return true;
-    } else {
-      console.log(`[Info] URL filtered out (no Iran keywords): ${url}`);
-      return false;
-    }
+
+  // For all other categories (e.g., 'International', or any future categories),
+  // we apply strict keyword filtering to ensure relevance.
+  const iranKeywords = [
+    // Core Iran terms
+    'iran', 'iranian', 'tehran', 'persian', 'persia', 
+    // Leaders and officials
+    'khamenei', 'raisi', 'rouhani', 'zarif', 'ayatollah',
+    // Military and security
+    'irgc', 'revolutionary-guard', 'quds', 'basij', 'sepah',
+    // Nuclear program
+    'nuclear', 'uranium', 'enrichment', 'centrifuge', 'natanz', 'fordow',
+    // Sanctions and diplomacy
+    'sanctions', 'jcpoa', 'nuclear-deal', 'nuclear-talks',
+    // Regional conflicts involving Iran
+    'israel-iran', 'iran-israel', 'iran-war', 'iran-conflict',
+    'houthis', 'hezbollah', 'proxy', 'axis-resistance',
+    // Iranian cities and regions
+    'isfahan', 'mashhad', 'shiraz', 'tabriz', 'qom', 'karaj',
+    // Iranian organizations
+    'mois', 'ministry-intelligence', 'iriaf', 'irin'
+  ];
+
+  const urlLower = url.toLowerCase();
+  const hasIranKeyword = iranKeywords.some(keyword => urlLower.includes(keyword));
+
+  if (hasIranKeyword) {
+    console.log(`[Info] URL passed Iran filter for category '${websiteCategory}': ${url}`);
+    return true;
+  } else {
+    console.log(`[Info] URL for category '${websiteCategory}' filtered out (no Iran keywords): ${url}`);
+    return false;
   }
-  
-  // Default: Accept all URLs for unknown categories
-  console.log(`[Info] Unknown category '${websiteCategory}', accepting URL: ${url}`);
-  return true;
 }
 
 // Load websites from database

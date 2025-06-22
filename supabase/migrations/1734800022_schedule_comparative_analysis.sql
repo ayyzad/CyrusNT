@@ -11,12 +11,12 @@ SELECT cron.schedule(
     '*/60 * * * *', -- Every 60 minutes
     $$
     SELECT net.http_post(
-        url:= (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url') || '/functions/v1/comparative-analysis',
+        url:= (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url') || '/functions/v1/comparative-analysis?action=analyze&hours_back=12',
         headers:= jsonb_build_object(
             'Content-Type', 'application/json',
             'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'anon_key')
-        ),
-        body:= '{"hours_back": 12}'::jsonb
+        )
+        -- No body is needed as params are in the URL
     );
     $$
 );
