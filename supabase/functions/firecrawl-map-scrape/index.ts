@@ -165,208 +165,219 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case 'fetch': {
-        console.log('Starting Firecrawl scraping process...');
-        const websites = await loadWebsites();
-        const results = [];
-        
-        for (const website of websites) {
-          console.log(`Processing website: ${website.name}`);
-          let processed = 0;
-          let total = 0;
-          let error = '';
-          
+        // Fire and forget the scraping process.
+        // We don't await this, so the function returns immediately.
+        (async () => {
           try {
-            const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
-            if (!firecrawlApiKey) {
-              throw new Error('Missing Firecrawl API key');
-            }
+            // The entire long-running logic is now inside this async IIFE
+            console.log('Starting Firecrawl scraping process in the background...');
+            const websites = await loadWebsites();
+            const results = [];
             
-            // Step 1: Map the website to discover all URLs
-            const mapResponse = await fetch(`https://api.firecrawl.dev/v1/map`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${firecrawlApiKey}`,
-              },
-              body: JSON.stringify({
-                url: website.url,
-                includeSubdomains: true
-              }),
-            }).then(async response => {
-              const text = await response.text();
+            for (const website of websites) {
+              console.log(`Processing website: ${website.name}`);
+              let processed = 0;
+              let total = 0;
+              let error = '';
+              
               try {
-                return JSON.parse(text);
-              } catch (error) {
-                console.log(`[Error] Failed to parse Firecrawl map response as JSON. Status: ${response.status}, Response: ${text.substring(0, 200)}...`);
-                throw new Error(`Invalid JSON response from Firecrawl map API: ${text.substring(0, 100)}`);
-              }
-            });
-            
-            if (mapResponse.success && mapResponse.links) {
-              const discoveredLinks = mapResponse.links;
-              
-              // Filter out base URLs (exact match with the website URL)
-              const filteredLinks = discoveredLinks.filter((link: string) => link !== website.url);
-              
-              console.log(`[Info] Discovered ${discoveredLinks.length} total URLs, filtered to ${filteredLinks.length} URLs (excluded base URL)`);
-              
-              // Query existing article URLs from database to avoid reprocessing
-              const existingUrlsResponse = await fetch(`${supabaseUrl}/rest/v1/articles?select=link`, {
-                method: 'GET',
-                headers: {
-                  'Authorization': `Bearer ${supabaseKey}`,
-                  'apikey': supabaseKey,
+                const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
+                if (!firecrawlApiKey) {
+                  throw new Error('Missing Firecrawl API key');
                 }
-              });
-              
-              const existingArticles = await existingUrlsResponse.json();
-              const existingUrls = new Set(existingArticles.map((article: any) => article.link));
-              
-              // Filter out URLs that already exist in database
-              const newUrls = filteredLinks.filter((link: string) => !existingUrls.has(link));
-              
-              console.log(`[Info] Found ${existingUrls.size} existing articles, ${newUrls.length} new URLs to process`);
-              
-              // Apply URL filtering based on website category and keywords
-              const filteredUrls = newUrls.filter((url: string) => shouldProcessUrl(url, website.category));
-              
-              console.log(`[Info] Filtered ${newUrls.length} URLs to ${filteredUrls.length} URLs based on category and keywords`);
-              
-              // Limit to first 5 URLs to avoid timeouts and rate limits
-              const limitedLinks = filteredUrls.slice(0, 5);
-              
-              // Step 2: Scrape each individual article URL
-              for (const link of limitedLinks) {
-                total++;
-                console.log(`[Info] Processing URL ${total}/${limitedLinks.length}: ${link}`);
                 
-                const scrapeResponse: FirecrawlResponse = await fetch(`https://api.firecrawl.dev/v1/scrape`, {
+                // Step 1: Map the website to discover all URLs
+                const mapResponse = await fetch(`https://api.firecrawl.dev/v1/map`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${firecrawlApiKey}`,
                   },
                   body: JSON.stringify({
-                    url: link,
-                    formats: ['markdown', 'json'],
-                    jsonOptions: {
-                      schema: {
-                        type: 'object',
-                        properties: {
-                          title: { type: 'string', description: 'Article title' },
-                          author: { type: 'string', description: 'Article author or byline' },
-                          publishedDate: { type: 'string', description: 'Article publication date in ISO format' },
-                          summary: { type: 'string', description: 'Article summary or description' },
-                          content: { type: 'string', description: 'Main article content' },
-                          tags: { type: 'array', items: { type: 'string' }, description: 'An array of relevant keywords or tags for the article' }
-                        }
-                      }
-                    }
+                    url: website.url,
+                    includeSubdomains: true
                   }),
                 }).then(async response => {
                   const text = await response.text();
                   try {
                     return JSON.parse(text);
                   } catch (error) {
-                    console.log(`[Error] Failed to parse Firecrawl scrape response as JSON. Status: ${response.status}, Response: ${text.substring(0, 200)}...`);
-                    throw new Error(`Invalid JSON response from Firecrawl scrape API: ${text.substring(0, 100)}`);
+                    console.log(`[Error] Failed to parse Firecrawl map response as JSON. Status: ${response.status}, Response: ${text.substring(0, 200)}...`);
+                    throw new Error(`Invalid JSON response from Firecrawl map API: ${text.substring(0, 100)}`);
                   }
                 });
                 
-                if (scrapeResponse.success && scrapeResponse.data) {
-                  const metadata = scrapeResponse.data.metadata || {};
-                  const content = scrapeResponse.data.markdown || '';
-                  const jsonData = scrapeResponse.data.json || {};
+                if (mapResponse.success && mapResponse.links) {
+                  const discoveredLinks = mapResponse.links;
                   
-                  // Use extracted structured data first, fallback to metadata
-                  const title = jsonData.title || metadata.title || metadata.ogTitle || 'Untitled';
-                  const description = jsonData.summary || metadata.description || metadata.ogDescription || '';
-                  const author = jsonData.author || metadata.author || '';
+                  // Filter out base URLs (exact match with the website URL)
+                  const filteredLinks = discoveredLinks.filter((link: string) => link !== website.url);
                   
-                  // Extract publication date from metadata fields (where it actually exists)
-                  let pubDate = new Date().toISOString(); // Default fallback
-                  const possibleDateFields = [
-                    metadata.publishedTime,
-                    metadata['article:published_time'], 
-                    metadata.modifiedTime,
-                    metadata['article:modified_time'],
-                    jsonData.publishedDate
-                  ];
+                  console.log(`[Info] Discovered ${discoveredLinks.length} total URLs, filtered to ${filteredLinks.length} URLs (excluded base URL)`);
                   
-                  for (const dateField of possibleDateFields) {
-                    if (dateField) {
-                      try {
-                        pubDate = new Date(dateField).toISOString();
-                        console.log(`[Info] Using publication date: ${dateField} for ${link}`);
-                        break; // Use the first valid date found
-                      } catch (error) {
-                        console.log(`[Warning] Invalid date format for ${link}: ${dateField}`);
-                      }
-                    }
-                  }
-                  
-                  // Insert article using direct Supabase REST API with upsert
-                  const insertResponse = await fetch(`${supabaseUrl}/rest/v1/articles?on_conflict=link`, {
-                    method: 'POST',
+                  // Query existing article URLs from database to avoid reprocessing
+                  const existingUrlsResponse = await fetch(`${supabaseUrl}/rest/v1/articles?select=link`, {
+                    method: 'GET',
                     headers: {
                       'Authorization': `Bearer ${supabaseKey}`,
-                      'Content-Type': 'application/json',
                       'apikey': supabaseKey,
-                      'Prefer': 'return=minimal, resolution=merge-duplicates'
-                    },
-                    body: JSON.stringify({
-                      title: title,
-                      description: description,
-                      content: content,
-                      link: link,
-                      source: website.name,
-                      category: website.category,
-                      author: author,
-                      pub_date: pubDate,
-                      guid: link,
-                      tags: jsonData.tags || [],
-                    })
+                    }
                   });
                   
-                  if (insertResponse.ok || insertResponse.status === 409) {
-                    processed++;
-                    if (insertResponse.status === 409) {
-                      console.log(`[Info] Duplicate article skipped: ${link}`);
+                  const existingArticles = await existingUrlsResponse.json();
+                  const existingUrls = new Set(existingArticles.map((article: any) => article.link));
+                  
+                  // Filter out URLs that already exist in database
+                  const newUrls = filteredLinks.filter((link: string) => !existingUrls.has(link));
+                  
+                  console.log(`[Info] Found ${existingUrls.size} existing articles, ${newUrls.length} new URLs to process`);
+                  
+                  // Apply URL filtering based on website category and keywords
+                  const filteredUrls = newUrls.filter((url: string) => shouldProcessUrl(url, website.category));
+                  
+                  console.log(`[Info] Filtered ${newUrls.length} URLs to ${filteredUrls.length} URLs based on category and keywords`);
+                  
+                  // Limit to first 5 URLs to avoid timeouts and rate limits
+                  const limitedLinks = filteredUrls.slice(0, 5);
+                  
+                  // Step 2: Scrape each individual article URL
+                  for (const link of limitedLinks) {
+                    total++;
+                    console.log(`[Info] Processing URL ${total}/${limitedLinks.length}: ${link}`);
+                    
+                    const scrapeResponse: FirecrawlResponse = await fetch(`https://api.firecrawl.dev/v1/scrape`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${firecrawlApiKey}`,
+                      },
+                      body: JSON.stringify({
+                        url: link,
+                        formats: ['markdown', 'json'],
+                        jsonOptions: {
+                          schema: {
+                            type: 'object',
+                            properties: {
+                              title: { type: 'string', description: 'Article title' },
+                              author: { type: 'string', description: 'Article author or byline' },
+                              publishedDate: { type: 'string', description: 'Article publication date in ISO format' },
+                              summary: { type: 'string', description: 'Article summary or description' },
+                              content: { type: 'string', description: 'Main article content' },
+                              tags: { type: 'array', items: { type: 'string' }, description: 'An array of relevant keywords or tags for the article' }
+                            }
+                          }
+                        }
+                      }),
+                    }).then(async response => {
+                      const text = await response.text();
+                      try {
+                        return JSON.parse(text);
+                      } catch (error) {
+                        console.log(`[Error] Failed to parse Firecrawl scrape response as JSON. Status: ${response.status}, Response: ${text.substring(0, 200)}...`);
+                        throw new Error(`Invalid JSON response from Firecrawl scrape API: ${text.substring(0, 100)}`);
+                      }
+                    });
+                    
+                    if (scrapeResponse.success && scrapeResponse.data) {
+                      const metadata = scrapeResponse.data.metadata || {};
+                      const content = scrapeResponse.data.markdown || '';
+                      const jsonData = scrapeResponse.data.json || {};
+                      
+                      // Use extracted structured data first, fallback to metadata
+                      const title = jsonData.title || metadata.title || metadata.ogTitle || 'Untitled';
+                      const description = jsonData.summary || metadata.description || metadata.ogDescription || '';
+                      const author = jsonData.author || metadata.author || '';
+                      
+                      // Extract publication date from metadata fields (where it actually exists)
+                      let pubDate = new Date().toISOString(); // Default fallback
+                      const possibleDateFields = [
+                        metadata.publishedTime,
+                        metadata['article:published_time'], 
+                        metadata.modifiedTime,
+                        metadata['article:modified_time'],
+                        jsonData.publishedDate
+                      ];
+                      
+                      for (const dateField of possibleDateFields) {
+                        if (dateField) {
+                          try {
+                            pubDate = new Date(dateField).toISOString();
+                            console.log(`[Info] Using publication date: ${dateField} for ${link}`);
+                            break; // Use the first valid date found
+                          } catch (error) {
+                            console.log(`[Warning] Invalid date format for ${link}: ${dateField}`);
+                          }
+                        }
+                      }
+                      
+                      // Insert article using direct Supabase REST API with upsert
+                      const insertResponse = await fetch(`${supabaseUrl}/rest/v1/articles?on_conflict=link`, {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${supabaseKey}`,
+                          'Content-Type': 'application/json',
+                          'apikey': supabaseKey,
+                          'Prefer': 'return=minimal, resolution=merge-duplicates'
+                        },
+                        body: JSON.stringify({
+                          title: title,
+                          description: description,
+                          content: content,
+                          link: link,
+                          source: website.name,
+                          category: website.category,
+                          author: author,
+                          pub_date: pubDate,
+                          guid: link,
+                          tags: jsonData.tags || [],
+                        })
+                      });
+                      
+                      if (insertResponse.ok || insertResponse.status === 409) {
+                        processed++;
+                        if (insertResponse.status === 409) {
+                          console.log(`[Info] Duplicate article skipped: ${link}`);
+                        } else {
+                          console.log(`[Info] New article inserted: ${link}`);
+                        }
+                      } else {
+                        console.log(`[Error] Failed to insert article: ${link}, Status: ${insertResponse.status}`);
+                        error = await insertResponse.text();
+                      }
                     } else {
-                      console.log(`[Info] New article inserted: ${link}`);
+                      console.log(`[Warning] Failed to scrape content for: ${link}, Response: ${JSON.stringify(scrapeResponse)}`);
                     }
-                  } else {
-                    console.log(`[Error] Failed to insert article: ${link}, Status: ${insertResponse.status}`);
-                    error = await insertResponse.text();
                   }
                 } else {
-                  console.log(`[Warning] Failed to scrape content for: ${link}, Response: ${JSON.stringify(scrapeResponse)}`);
+                  error = mapResponse.error || 'Failed to map website URLs';
                 }
+                
+              } catch (error) {
+                console.error(`Error processing website ${website.name}:`, error);
+                error = (error as Error).message;
               }
-            } else {
-              error = mapResponse.error || 'Failed to map website URLs';
+              
+              results.push({
+                source: website.name,
+                processed,
+                total,
+                error
+              });
             }
-            
+            console.log('Background Firecrawl scraping process completed successfully.');
           } catch (error) {
-            console.error(`Error processing website ${website.name}:`, error);
-            error = (error as Error).message;
+            console.error('Error in background Firecrawl scraping process:', error);
           }
-          
-          results.push({
-            source: website.name,
-            processed,
-            total,
-            error
-          });
-        }
-        
+        })();
+
+        // Immediately return a 202 Accepted response to the client
         return new Response(
           JSON.stringify({
             success: true,
-            message: 'Firecrawl scraping completed',
-            results
+            message: 'Firecrawl scraping process initiated in the background. Check function logs for progress.',
           }),
           {
+            status: 202, // Accepted
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           }
         );
