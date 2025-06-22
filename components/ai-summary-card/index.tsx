@@ -13,7 +13,7 @@ export interface ComparativeAnalysis {
 
 const AiSummaryCard: React.FC<{ analysis: ComparativeAnalysis }> = ({ analysis }) => {
   return (
-    <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden border">
+    <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden border transform hover:scale-105 transition-transform duration-300">
       <div className="p-6">
         <h3 className="text-xl font-bold mb-2 text-foreground">{analysis.topic_summary}</h3>
         <p className="text-muted-foreground text-sm mb-4">Generated on: {new Date(analysis.created_at).toLocaleString()}</p>

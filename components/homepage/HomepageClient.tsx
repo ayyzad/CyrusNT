@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
+import { ArrowRight, Book, Newspaper, Sparkles, Zap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AiSummaryCard, { ComparativeAnalysis } from '@/components/ai-summary-card';
 import NewsCard, { Article } from '@/components/news-card';
@@ -59,7 +60,10 @@ export function HomepageClient({ articles, analyses, tags }: HomepageClientProps
       {/* Desktop Layout: 3-column grid */}
       <main className="hidden lg:grid lg:grid-cols-3 gap-8">
         <aside className="lg:col-span-1">
-          <h2 className="text-3xl font-bold mb-6 text-foreground">AI Topic Summary</h2>
+          <h2 className="text-3xl font-bold mb-6 text-foreground flex items-center">
+            <Sparkles className="h-6 w-6 mr-2 text-primary" />
+            <span>Topic Summary</span>
+          </h2>
           <div className="space-y-6">
             {analyses.map((analysis) => (
               <AiSummaryCard key={analysis.id} analysis={analysis} />

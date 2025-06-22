@@ -1,6 +1,9 @@
 'use client';
 
 import React from 'react';
+import { ArrowRight, Clock } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import NumberLineIndicator from '../neutrality-indicator/number-line';
 
 export interface Article {
   id: string;
@@ -11,17 +14,29 @@ export interface Article {
   image_url?: string;
   description?: string;
   tags?: string[];
+  neutrality_rating: number | null;
 }
 
 const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
   return (
-    <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 border">
+    <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 border flex flex-col">
       {article.image_url && <img className="w-full h-48 object-cover" src={article.image_url} alt={article.title} />}
-      <div className="p-6">
+      <div className="p-6 flex flex-col flex-grow">
         <h3 className="text-xl font-bold mb-2 text-foreground">{article.title}</h3>
+        <div className="flex justify-between items-start text-muted-foreground text-sm mb-4">
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">{article.source}</span>
+            <NumberLineIndicator rating={article.neutrality_rating} />
+          </div>
+          <div className="text-right">
+            <span className="text-xs">{formatDistanceToNow(new Date(article.pub_date), { addSuffix: true })}</span>
+          </div>
+        </div>
         {article.description && <p className="text-foreground/90 my-4 text-sm">{article.description}</p>}
-        <p className="text-muted-foreground text-sm mb-4">{new Date(article.pub_date).toLocaleDateString()} - {article.source}</p>
-        <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Read More</a>
+        <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline mt-auto self-end flex items-center">
+          Read More
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </a>
       </div>
     </div>
   );
