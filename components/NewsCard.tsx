@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { ArrowRight, Clock } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 import NumberLineIndicator from './NeutralityIndicator';
 
 export interface Article {
@@ -25,12 +24,65 @@ const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
     setImageError(true);
   };
 
+  const isValidImageUrl = (url: string | undefined): boolean => {
+    if (!url) return false;
+    try {
+      const urlObj = new URL(url);
+      // Check for common malformed query parameters
+      const params = urlObj.searchParams;
+      if (params.has('auto') && params.get('auto') === 'formatl') {
+        // Fix the malformed 'auto=formatl' parameter
+        params.set('auto', 'format');
+        return true;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getCleanImageUrl = (url: string | undefined): string | undefined => {
+    if (!url) return undefined;
+    try {
+      const urlObj = new URL(url);
+      const params = urlObj.searchParams;
+      if (params.has('auto') && params.get('auto') === 'formatl') {
+        params.set('auto', 'format');
+        return urlObj.toString();
+      }
+      return url;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const pubDate = new Date(dateString);
+    const diffInMinutes = Math.floor((now.getTime() - pubDate.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 0) {
+      // Future date
+      const absDiff = Math.abs(diffInMinutes);
+      if (absDiff < 60) return `${absDiff}m`;
+      return `${Math.floor(absDiff / 60)}h`;
+    }
+    
+    if (diffInMinutes < 60) {
+      return `${diffInMinutes}m`;
+    } else if (diffInMinutes < 1440) { // Less than 24 hours
+      return `${Math.floor(diffInMinutes / 60)}h`;
+    } else {
+      return `${Math.floor(diffInMinutes / 1440)}d`;
+    }
+  };
+
   return (
     <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 border flex flex-col">
-      {article.image_url && !imageError && (
+      {article.image_url && isValidImageUrl(article.image_url) && !imageError && (
         <Image 
           className="w-full h-48 object-cover"
-          src={article.image_url} 
+          src={getCleanImageUrl(article.image_url) || article.image_url} 
           alt={article.title}
           width={400}
           height={192}
@@ -47,7 +99,7 @@ const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
           <div className="text-right">
             <span className="text-xs flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {formatDistanceToNow(new Date(article.pub_date), { addSuffix: true })}
+              {getTimeAgo(article.pub_date)}
             </span>
           </div>
         </div>
