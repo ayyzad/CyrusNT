@@ -5,7 +5,7 @@ export async function getLatestAnalyses(limit: number = 5): Promise<ComparativeA
   const supabase = await createClient();
     const { data, error } = await supabase
       .from('comparative_analyses')
-      .select('id, topic_summary, aggregate_summary, created_at, article_ids')
+      .select('id, topic_summary, aggregate_summary, source_perspectives, created_at, article_ids')
       .order('created_at', { ascending: false })
       .limit(limit);
 
