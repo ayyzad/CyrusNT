@@ -2,6 +2,12 @@
 
 import React from 'react';
 import { Badge } from '@/components/ui/badge-source-url';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 export interface ComparativeAnalysis {
   id: string;
@@ -21,25 +27,33 @@ const AiSummaryCard: React.FC<{ analysis: ComparativeAnalysis }> = ({ analysis }
 
         {analysis.sources && analysis.sources.length > 0 && (
           <div className="mt-4">
-            <h4 className="font-semibold text-sm text-foreground mb-2">Sources:</h4>
-            <div className="flex flex-wrap gap-2">
-              {analysis.sources.map((source, index) => {
-                const cleanUrl = source.link.replace(/^(?:https?|ftp):\/\/(?:www\.)?/, '').replace(/\/$/, '');
-                const parts = cleanUrl.split('/');
-                let truncatedUrl = parts[0];
-                if (parts[1]) {
-                  truncatedUrl += `/${parts[1]}`;
-                }
-                if (cleanUrl.length > truncatedUrl.length) {
-                  truncatedUrl += '...';
-                }
-                return (
-                  <a key={index} href={source.link} target="_blank" rel="noopener noreferrer">
-                    <Badge variant="secondary">{truncatedUrl}</Badge>
-                  </a>
-                );
-              })}
-            </div>
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="sources">
+                <AccordionTrigger className="text-sm font-semibold text-foreground">
+                  Sources ({analysis.sources.length})
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.sources.map((source, index) => {
+                      const cleanUrl = source.link.replace(/^(?:https?|ftp):\/\/(?:www\.)?/, '').replace(/\/$/, '');
+                      const parts = cleanUrl.split('/');
+                      let truncatedUrl = parts[0];
+                      if (parts[1]) {
+                        truncatedUrl += `/${parts[1]}`;
+                      }
+                      if (cleanUrl.length > truncatedUrl.length) {
+                        truncatedUrl += '...';
+                      }
+                      return (
+                        <a key={index} href={source.link} target="_blank" rel="noopener noreferrer">
+                          <Badge variant="secondary">{truncatedUrl}</Badge>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         )}
 

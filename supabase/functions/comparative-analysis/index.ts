@@ -89,7 +89,7 @@ async function handler(req: Request): Promise<Response> {
 
     const url = new URL(req.url);
     const action = url.searchParams.get('action') || 'analyze';
-    const hoursBack = parseInt(url.searchParams.get('hours_back') || '24');
+    const hoursBack = parseInt(url.searchParams.get('hours_back') || '12');
     const similarityThreshold = parseFloat(url.searchParams.get('similarity_threshold') || '0.5');
 
     switch (action) {
@@ -490,7 +490,7 @@ ${i + 1}. **${article.title}**
 
 Please provide your analysis in the following JSON format:
 {
-  "topic_title": "A concise 3-6 word topic title/tag (e.g., 'Israeli Strikes on Iran', 'Iran Nuclear Program')",
+  "topic_title": "A concise 3-6 word topic title/tag",
   "aggregate_summary": "A comprehensive 2-3 sentence summary of the overall topic/event",
   "source_perspectives": [
     {

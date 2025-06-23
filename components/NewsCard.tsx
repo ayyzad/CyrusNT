@@ -18,6 +18,13 @@ export interface Article {
 }
 
 const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
+  // Helper function to count words in description
+  const getWordCount = (text: string) => {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  };
+
+  const shouldShowDescription = article.description && getWordCount(article.description) >= 10;
+
   return (
     <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 border flex flex-col">
       {article.image_url && <img className="w-full h-48 object-cover" src={article.image_url} alt={article.title} />}
@@ -32,7 +39,7 @@ const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
             <span className="text-xs">{formatDistanceToNow(new Date(article.pub_date), { addSuffix: true })}</span>
           </div>
         </div>
-        {article.description && <p className="text-foreground/90 my-4 text-sm">{article.description}</p>}
+        {shouldShowDescription && <p className="text-foreground/90 my-4 text-sm">{article.description}</p>}
         <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline mt-auto self-end flex items-center">
           Read More
           <ArrowRight className="ml-2 h-4 w-4" />

@@ -69,19 +69,6 @@ async function loadWebsites(): Promise<Website[]> {
   }
 }
 
-// Filter URLs to only include those relevant to Iran for non-specific sources
-function shouldProcessUrl(url: string, websiteCategory: string): boolean {
-  if (websiteCategory === 'Iran-Specific') {
-    return true
-  }
-  const iranKeywords = [
-    'iran', 'iranian', 'tehran', 'persian', 'khamenei', 'raisi', 'irgc', 'jcpoa', 'nuclear', 'sanctions', 'israel-iran', 'hezbollah', 'houthis'
-    // A minimal list for URL filtering; more comprehensive filtering happens at the content level.
-  ]
-  const urlLower = url.toLowerCase()
-  return iranKeywords.some(keyword => urlLower.includes(keyword))
-}
-
 // Use Firecrawl's /map endpoint to discover all links on a site
 async function getLinksFromFirecrawlMap(url: string, apiKey: string): Promise<string[]> {
   try {
@@ -233,13 +220,11 @@ Deno.serve(async (req) => {
       // 3. Filter out URLs that already exist in our system
       const newUrls = await filterForNewUrls(supabaseUrl, supabaseKey, articleLinks)
       
-      // 4. Apply keyword filtering for non-specific sources
-      const relevantUrls = newUrls.filter(url => shouldProcessUrl(url, website.category))
-      console.log(`[Filter] Found ${relevantUrls.length} relevant new URLs for '${website.name}'.`)
+      console.log(`[Info] Found ${newUrls.length} new URLs for '${website.name}' - content filtering will happen during scraping.`)
 
-      // 5. Batch insert new URLs into the scraping queue
-      if (relevantUrls.length > 0) {
-        const queueItems = relevantUrls.map(url => ({
+      // 4. Batch insert new URLs into the scraping queue
+      if (newUrls.length > 0) {
+        const queueItems = newUrls.map(url => ({
           website_id: website.id,
           url_to_scrape: url,
           status: 'pending',
