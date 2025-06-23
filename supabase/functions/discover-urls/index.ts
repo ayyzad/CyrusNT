@@ -217,6 +217,11 @@ Deno.serve(async (req) => {
       // 2. Filter out the base domain URL itself and other non-article links
       const articleLinks = discoveredLinks.filter(link => {
           try {
+              // Exclude the exact base URL used for mapping
+              if (link === website.url) {
+                return false
+              }
+              
               const url = new URL(link);
               // Basic filter: not the homepage, not a mailto link, not a social media link, etc.
               return url.pathname !== '/' && !['mailto:', 'tel:'].some(p => url.protocol.includes(p)) && !['twitter.com', 'facebook.com', 'linkedin.com'].some(d => url.hostname.includes(d));

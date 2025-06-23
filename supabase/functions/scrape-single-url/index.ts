@@ -27,13 +27,13 @@ const corsHeaders = {
 // --- Interfaces ---
 interface QueueJob {
   id: string;
-  url: string;
+  url_to_scrape: string;
   website_id: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   created_at: string;
-  updated_at: string;
-  retry_count: number;
-  error_message?: string;
+  last_processed_at: string | null;
+  attempts: number;
+  error_log?: string;
 }
 
 interface Website {
@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
   const queueJob: QueueJob = requestBody.record
 
   try {
-    console.log(`[Info] Received job ${queueJob.id}: Scraping ${queueJob.url}`)
+    console.log(`[Info] Received job ${queueJob.id}: Scraping ${queueJob.url_to_scrape}`)
 
     // Initialize Supabase connection details
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         status: 'processing',
         last_processed_at: new Date().toISOString(),
-        retry_count: (queueJob.retry_count || 0) + 1,
+        attempts: (queueJob.attempts || 0) + 1,
       })
     })
 
@@ -120,45 +120,88 @@ Deno.serve(async (req) => {
       throw new Error('Missing Firecrawl API key')
     }
 
-    const scrapeResponse: FirecrawlResponse = await fetch(`https://api.firecrawl.dev/v1/scrape`, {
+    console.log(`[Debug] Calling Firecrawl scrape for: ${queueJob.url_to_scrape}`)
+    
+    const scrapeRequest = await fetch(`https://api.firecrawl.dev/v1/scrape`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${firecrawlApiKey}`,
       },
       body: JSON.stringify({
-        url: queueJob.url,
-        pageOptions: { onlyMainContent: true },
+        url: queueJob.url_to_scrape,
+        formats: ['markdown', 'json'],
+        jsonOptions: {
+          schema: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Article title' },
+              author: { type: 'string', description: 'Article author or byline' },
+              publishedDate: { type: 'string', description: 'Article publication date in ISO format' },
+              summary: { type: 'string', description: 'Article summary or description' },
+              content: { type: 'string', description: 'Main article content' },
+              tags: { type: 'array', items: { type: 'string' }, description: 'An array of relevant keywords or tags for the article' }
+            }
+          }
+        }
       }),
-    }).then(res => res.json())
+    })
+
+    console.log(`[Debug] Firecrawl scrape response status: ${scrapeRequest.status}`)
+    
+    if (!scrapeRequest.ok) {
+      const errorText = await scrapeRequest.text()
+      console.error(`[Firecrawl Error] HTTP ${scrapeRequest.status}: ${errorText}`)
+      throw new Error(`Firecrawl API error: ${scrapeRequest.status} - ${errorText}`)
+    }
+
+    const responseText = await scrapeRequest.text()
+    let scrapeResponse: FirecrawlResponse
+    
+    try {
+      scrapeResponse = JSON.parse(responseText)
+    } catch (error) {
+      console.error(`[Error] Failed to parse Firecrawl response as JSON. Response: ${responseText.substring(0, 200)}...`)
+      throw new Error(`Invalid JSON response from Firecrawl API: ${responseText.substring(0, 100)}`)
+    }
 
     if (!scrapeResponse.success || !scrapeResponse.data) {
-      throw new Error(scrapeResponse.error || `Scraping failed for ${queueJob.url}`)
+      console.error(`[Firecrawl Error] Response:`, scrapeResponse)
+      throw new Error(scrapeResponse.error || `Scraping failed for ${queueJob.url_to_scrape}`)
     }
+
+    console.log(`[Debug] Successfully scraped content for: ${queueJob.url_to_scrape}`)
 
     // 3. Process and insert the article
     const { data } = scrapeResponse
     const metadata = data.metadata || {}
     const content = data.markdown || ''
+    const jsonData = data.json || {}
 
-    const title = metadata.title || metadata.ogTitle || 'Untitled'
-    const description = metadata.description || metadata.ogDescription || ''
-    const author = metadata.author || ''
+    // Use extracted structured data first, fallback to metadata
+    const title = jsonData.title || metadata.title || metadata.ogTitle || 'Untitled'
+    const description = jsonData.summary || metadata.description || metadata.ogDescription || ''
+    const author = jsonData.author || metadata.author || ''
 
-    let pubDate = new Date().toISOString()
+    // Extract publication date from metadata fields (where it actually exists)
+    let pubDate = new Date().toISOString() // Default fallback
     const possibleDateFields = [
       metadata.publishedTime,
-      metadata['article:published_time'],
+      metadata['article:published_time'], 
       metadata.modifiedTime,
       metadata['article:modified_time'],
+      jsonData.publishedDate
     ]
 
     for (const dateField of possibleDateFields) {
       if (dateField) {
         try {
           pubDate = new Date(dateField).toISOString()
-          break
-        } catch (e) { /* ignore invalid dates */ }
+          console.log(`[Info] Using publication date: ${dateField} for ${queueJob.url_to_scrape}`)
+          break // Use the first valid date found
+        } catch (error) {
+          console.log(`[Warning] Invalid date format for ${queueJob.url_to_scrape}: ${dateField}`)
+        }
       }
     }
     
@@ -187,12 +230,13 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         title, description, content,
-        link: queueJob.url,
+        link: queueJob.url_to_scrape,
         source: websiteData[0].name,
         category: websiteData[0].category,
         author, pub_date: pubDate,
-        guid: queueJob.url,
+        guid: queueJob.url_to_scrape,
         website_id: queueJob.website_id,
+        tags: jsonData.tags || [],
       })
     })
 
@@ -212,7 +256,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         status: 'completed',
-        error_message: null,
+        error_log: null,
       })
     })
 
@@ -232,7 +276,7 @@ Deno.serve(async (req) => {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-      const newAttemptCount = (queueJob.retry_count || 0) // No +1 here, it was already incremented
+      const newAttemptCount = (queueJob.attempts || 0) // No +1 here, it was already incremented
       const newStatus = newAttemptCount >= 3 ? 'failed' : 'pending' // Retry up to 3 times
 
       const updateResponse = await fetch(`${supabaseUrl}/rest/v1/scraping_queue?id=eq.${queueJob.id}`, {
@@ -243,7 +287,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           status: newStatus,
-          error_message: errorMessage,
+          error_log: errorMessage,
         })
       })
 
