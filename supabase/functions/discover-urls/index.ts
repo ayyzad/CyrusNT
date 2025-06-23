@@ -40,27 +40,33 @@ interface FirecrawlMapResponse {
 
 // --- Helper Functions ---
 
-// Load all active and enabled websites from the database
-async function loadWebsites(supabaseUrl: string, supabaseKey: string): Promise<Website[]> {
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/websites?is_active=eq.true&scraping_enabled=eq.true&select=id,url,name,category`,
-    {
+// Load websites from database
+async function loadWebsites(): Promise<Website[]> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Missing Supabase credentials');
+    }
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/websites?is_active=eq.true&scraping_enabled=eq.true`, {
       headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
         'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json'
       }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to load websites: ${response.statusText}`);
     }
-  )
 
-  if (!response.ok) {
-    const error = await response.text()
-    console.error('Error loading websites:', error)
-    throw new Error(`Failed to load websites: ${error}`)
+    return await response.json();
+  } catch (error) {
+    console.error('Error loading websites:', error);
+    throw error;
   }
-
-  const data = await response.json()
-  return data || []
 }
 
 // Filter URLs to only include those relevant to Iran for non-specific sources
@@ -78,148 +84,202 @@ function shouldProcessUrl(url: string, websiteCategory: string): boolean {
 
 // Use Firecrawl's /map endpoint to discover all links on a site
 async function getLinksFromFirecrawlMap(url: string, apiKey: string): Promise<string[]> {
-  const response: FirecrawlMapResponse = await fetch(`https://api.firecrawl.dev/v1/map`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ url, crawlerOptions: { includeSubdomains: false, maxDepth: 1, limit: 2000 } }), // Limit crawl depth and total pages
-  }).then(res => res.json())
+  try {
+    console.log(`[Debug] Calling Firecrawl map for: ${url}`)
+    
+    const response = await fetch(`https://api.firecrawl.dev/v1/map`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ 
+        url, 
+        includeSubdomains: true,
+        limit: 100,
+        ignoreSitemap: true
+      }),
+    })
 
-  if (!response.success || !response.links) {
-    console.error(`[Firecrawl Map Error] Failed for ${url}:`, response.error || 'No links returned')
+    console.log(`[Debug] Firecrawl response status: ${response.status}`)
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[Firecrawl Map Error] HTTP ${response.status} for ${url}: ${errorText}`)
+      return []
+    }
+
+    const jsonResponse: FirecrawlMapResponse = await response.json()
+    
+    if (!jsonResponse.success || !jsonResponse.links) {
+      console.error(`[Firecrawl Map Error] Failed for ${url}:`, jsonResponse.error || 'No links returned')
+      return []
+    }
+    
+    console.log(`[Debug] Found ${jsonResponse.links.length} links for ${url}`)
+    return jsonResponse.links
+  } catch (error) {
+    console.error(`[Firecrawl Map Error] Exception for ${url}:`, error)
     return []
   }
-  return response.links
 }
 
 // Filter out URLs that already exist in the articles table or the scraping queue
 async function filterForNewUrls(supabaseUrl: string, supabaseKey: string, urls: string[]): Promise<string[]> {
   if (urls.length === 0) return []
 
-  // Fetch existing links from both tables in parallel
-  const [articlesRes, queueRes] = await Promise.all([
-    fetch(
-      `${supabaseUrl}/rest/v1/articles?select=link&link=in.(${urls.join(',')})`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-          'Content-Type': 'application/json'
-        }
-      }
-    ),
-    fetch(
-      `${supabaseUrl}/rest/v1/scraping_queue?select=url_to_scrape&url_to_scrape=in.(${urls.join(',')})`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-          'Content-Type': 'application/json'
-        }
-      }
-    )
-  ])
+  // Batch URLs to avoid URI too long errors
+  const batchSize = 50
+  const allExistingUrls = new Set<string>()
 
-  const articlesData = await articlesRes.json()
-  const queueData = await queueRes.json()
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const batch = urls.slice(i, i + batchSize)
+    
+    // Escape and quote URLs for PostgreSQL IN clause
+    const quotedUrls = batch.map(url => `"${url.replace(/"/g, '""')}"`).join(',')
 
-  if (!articlesRes.ok) console.error('Error fetching existing articles:', articlesData.error)
-  if (!queueRes.ok) console.error('Error fetching existing queue items:', queueData.error)
-
-  const existingLinks = new Set([
-    ...(articlesData.map((a: any) => a.link) || []),
-    ...(queueData.map((q: any) => q.url_to_scrape) || [])
-  ])
-
-  const newUrls = urls.filter(url => !existingLinks.has(url))
-  console.log(`[Filter] Discovered ${urls.length} URLs, filtered down to ${newUrls.length} new URLs.`)
-  return newUrls
-}
-
-// --- Main Function Handler ---
-
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
-  // This function is designed to be "fire-and-forget" from the cron job.
-  // The actual processing happens in the background.
-  (async () => {
     try {
-      console.log('[Info] Starting website mapping process...')
-
-      // Initialize clients
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY')!
-      if (!firecrawlApiKey) throw new Error('Missing Firecrawl API key')
-
-      const websites = await loadWebsites(supabaseUrl, supabaseKey)
-      console.log(`[Info] Found ${websites.length} active websites to process.`)
-
-      for (const website of websites) {
-        console.log(`\n--- Processing Website: ${website.name} ---`)
-        
-        // 1. Map the site to get all links
-        const discoveredLinks = await getLinksFromFirecrawlMap(website.url, firecrawlApiKey)
-        
-        // 2. Filter out the base domain URL itself and other non-article links
-        const articleLinks = discoveredLinks.filter(link => {
-            try {
-                const url = new URL(link);
-                // Basic filter: not the homepage, not a mailto link, not a social media link, etc.
-                return url.pathname !== '/' && !['mailto:', 'tel:'].some(p => url.protocol.includes(p)) && !['twitter.com', 'facebook.com', 'linkedin.com'].some(d => url.hostname.includes(d));
-            } catch (e) {
-                return false; // Invalid URL
-            }
-        });
-        
-        // 3. Filter out URLs that already exist in our system
-        const newUrls = await filterForNewUrls(supabaseUrl, supabaseKey, articleLinks)
-        
-        // 4. Apply keyword filtering for non-specific sources
-        const relevantUrls = newUrls.filter(url => shouldProcessUrl(url, website.category))
-        console.log(`[Filter] Found ${relevantUrls.length} relevant new URLs for '${website.name}'.`)
-
-        // 5. Batch insert new URLs into the scraping queue
-        if (relevantUrls.length > 0) {
-          const queueItems = relevantUrls.map(url => ({
-            website_id: website.id,
-            url_to_scrape: url,
-            status: 'pending',
-          }))
-
-          const response = await fetch(`${supabaseUrl}/rest/v1/scraping_queue`, {
-            method: 'POST',
+      // Fetch existing links from both tables in parallel
+      const [articlesRes, queueRes] = await Promise.all([
+        fetch(
+          `${supabaseUrl}/rest/v1/articles?select=link&link=in.(${quotedUrls})`,
+          {
             headers: {
               'Authorization': `Bearer ${supabaseKey}`,
               'apikey': supabaseKey,
               'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(queueItems)
-          })
-
-          if (!response.ok) {
-            const error = await response.text()
-            console.error(`[DB Error] Failed to insert into queue for ${website.name}:`, error)
-          } else {
-            console.log(`[Success] Added ${queueItems.length} new URLs to the scraping queue for ${website.name}.`)
+            }
           }
+        ),
+        fetch(
+          `${supabaseUrl}/rest/v1/scraping_queue?select=url_to_scrape&url_to_scrape=in.(${quotedUrls})`,
+          {
+            headers: {
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+      ])
+
+      if (!articlesRes.ok || !queueRes.ok) {
+        console.error(`[DB Error] Failed to check existing URLs for batch ${i}-${i + batchSize}`)
+        continue
+      }
+
+      const [articlesData, queueData] = await Promise.all([
+        articlesRes.json(),
+        queueRes.json()
+      ])
+
+      // Add existing URLs to the set
+      articlesData.forEach((article: any) => allExistingUrls.add(article.link))
+      queueData.forEach((item: any) => allExistingUrls.add(item.url_to_scrape))
+      
+    } catch (error) {
+      console.error(`[DB Error] Exception checking batch ${i}-${i + batchSize}:`, error)
+    }
+  }
+
+  // Return only URLs that don't exist in either table
+  return urls.filter(url => !allExistingUrls.has(url))
+}
+
+// --- Main Function Handler ---
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    console.log('[Info] Starting website mapping process...')
+
+    // Get environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY')
+
+    if (!supabaseUrl) throw new Error('Missing SUPABASE_URL environment variable')
+    if (!supabaseKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+    if (!firecrawlApiKey) throw new Error('Missing FIRECRAWL_API_KEY environment variable')
+
+    const websites = await loadWebsites()
+    console.log(`[Info] Found ${websites.length} active websites to process.`)
+
+    for (const website of websites) {
+      console.log(`\n--- Processing Website: ${website.name} ---`)
+      
+      // 1. Map the site to get all links
+      const discoveredLinks = await getLinksFromFirecrawlMap(website.url, firecrawlApiKey)
+      
+      // 2. Filter out the base domain URL itself and other non-article links
+      const articleLinks = discoveredLinks.filter(link => {
+          try {
+              const url = new URL(link);
+              // Basic filter: not the homepage, not a mailto link, not a social media link, etc.
+              return url.pathname !== '/' && !['mailto:', 'tel:'].some(p => url.protocol.includes(p)) && !['twitter.com', 'facebook.com', 'linkedin.com'].some(d => url.hostname.includes(d));
+          } catch (e) {
+              return false; // Invalid URL
+          }
+      });
+      
+      // 3. Filter out URLs that already exist in our system
+      const newUrls = await filterForNewUrls(supabaseUrl, supabaseKey, articleLinks)
+      
+      // 4. Apply keyword filtering for non-specific sources
+      const relevantUrls = newUrls.filter(url => shouldProcessUrl(url, website.category))
+      console.log(`[Filter] Found ${relevantUrls.length} relevant new URLs for '${website.name}'.`)
+
+      // 5. Batch insert new URLs into the scraping queue
+      if (relevantUrls.length > 0) {
+        const queueItems = relevantUrls.map(url => ({
+          website_id: website.id,
+          url_to_scrape: url,
+          status: 'pending',
+        }))
+
+        const response = await fetch(`${supabaseUrl}/rest/v1/scraping_queue`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(queueItems)
+        })
+
+        if (!response.ok) {
+          const error = await response.text()
+          console.error(`[DB Error] Failed to insert into queue for ${website.name}:`, error)
+        } else {
+          console.log(`[Success] Added ${queueItems.length} new URLs to the scraping queue for ${website.name}.`)
         }
       }
-      console.log('\n[Info] Website mapping process completed.')
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('[Fatal Error] The mapping process failed:', errorMessage)
     }
-  })();
 
-  // Return an immediate response to the cron job
-  return new Response(JSON.stringify({ message: "Website mapping process initiated." }), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    status: 202, // Accepted
-  });
-});
+    console.log('\n[Info] Website mapping process completed.')
+    
+    return new Response(
+      JSON.stringify({ 
+        message: "Website mapping process completed successfully",
+        websites_processed: websites.length 
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+
+  } catch (error) {
+    console.error('[Error] Function failed:', error)
+    return new Response(
+      JSON.stringify({ error: (error as Error).message }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  }
+})
