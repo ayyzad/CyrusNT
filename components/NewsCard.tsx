@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import NumberLineIndicator from './NeutralityIndicator';
@@ -18,16 +18,22 @@ export interface Article {
 }
 
 const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
-  // Helper function to count words in description
-  const getWordCount = (text: string) => {
-    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
-  };
+  const [imageError, setImageError] = useState(false);
 
-  const shouldShowDescription = article.description && getWordCount(article.description) >= 10;
+  const handleImageError = () => {
+    setImageError(true);
+  };
 
   return (
     <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 border flex flex-col">
-      {article.image_url && <img className="w-full h-48 object-cover" src={article.image_url} alt={article.title} />}
+      {article.image_url && !imageError && (
+        <img 
+          className="w-full h-48 object-cover"
+          src={article.image_url} 
+          alt={article.title}
+          onError={handleImageError}
+        />
+      )}
       <div className="p-6 flex flex-col flex-grow">
         <h3 className="text-xl font-bold mb-2 text-foreground">{article.title}</h3>
         <div className="flex justify-between items-start text-muted-foreground text-sm mb-4">
@@ -39,7 +45,7 @@ const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
             <span className="text-xs">{formatDistanceToNow(new Date(article.pub_date), { addSuffix: true })}</span>
           </div>
         </div>
-        {shouldShowDescription && <p className="text-foreground/90 my-4 text-sm">{article.description}</p>}
+        {article.description && <p className="text-foreground/90 my-4 text-sm">{article.description}</p>}
         <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline mt-auto self-end flex items-center">
           Read More
           <ArrowRight className="ml-2 h-4 w-4" />
