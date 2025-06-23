@@ -1,6 +1,25 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
+// Deno runtime type declarations for Supabase Edge Functions
+declare global {
+  namespace Deno {
+    function serve(
+      handler: (request: Request) => Response | Promise<Response>,
+      options?: { port?: number; hostname?: string }
+    ): void;
+
+    namespace env {
+      function get(key: string): string | undefined;
+    }
+  }
+}
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 interface Article {
   id: number;
   title: string;
@@ -86,11 +105,6 @@ function createChunks(content: string, chunkSize: number = 150, overlapPercent: 
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
