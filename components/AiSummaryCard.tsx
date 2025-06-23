@@ -33,14 +33,6 @@ export interface ComparativeAnalysis {
 const AiSummaryCard: React.FC<{ analysis: ComparativeAnalysis }> = ({ analysis }) => {
   const [showPerspectives, setShowPerspectives] = useState(false);
 
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
-      case 'positive': return 'text-green-600';
-      case 'negative': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
-
   const getSentimentBadgeVariant = (sentiment: string) => {
     switch (sentiment) {
       case 'positive': return 'default';

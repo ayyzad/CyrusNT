@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowRight, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import NumberLineIndicator from './NeutralityIndicator';
 
@@ -27,10 +28,12 @@ const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
   return (
     <div className="bg-card text-card-foreground shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 border flex flex-col">
       {article.image_url && !imageError && (
-        <img 
+        <Image 
           className="w-full h-48 object-cover"
           src={article.image_url} 
           alt={article.title}
+          width={400}
+          height={192}
           onError={handleImageError}
         />
       )}
@@ -42,7 +45,10 @@ const NewsCard: React.FC<{ article: Article }> = ({ article }) => {
             <NumberLineIndicator rating={article.neutrality_rating} />
           </div>
           <div className="text-right">
-            <span className="text-xs">{formatDistanceToNow(new Date(article.pub_date), { addSuffix: true })}</span>
+            <span className="text-xs flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {formatDistanceToNow(new Date(article.pub_date), { addSuffix: true })}
+            </span>
           </div>
         </div>
         {article.description && <p className="text-foreground/90 my-4 text-sm">{article.description}</p>}
