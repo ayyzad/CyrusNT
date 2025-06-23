@@ -61,7 +61,7 @@ export function HomepageClient({ articles, analyses, tags }: HomepageClientProps
             variant="outline"
             className="px-8 py-2"
           >
-            Load More Articles ({filteredArticles.length - visibleArticlesCount} remaining)
+            Load More Articles
           </Button>
         </div>
       )}
@@ -81,7 +81,7 @@ export function HomepageClient({ articles, analyses, tags }: HomepageClientProps
             size="sm"
             className="px-6"
           >
-            Load More Summaries ({analyses.length - visibleAnalysesCount} remaining)
+            Load More Summaries
           </Button>
         </div>
       )}
